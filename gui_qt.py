@@ -13,7 +13,10 @@ Chay:  pip install -r requirements-qt.txt
 Build exe: build-exe.bat (build gui_qt.py)
 """
 import asyncio
+import os
+import shutil
 import sys
+import tempfile
 import threading
 
 from PySide6.QtCore import Qt, Signal
@@ -111,26 +114,53 @@ class MainWindow(QMainWindow):
         row.addWidget(self.rate)
         layout.addLayout(row)
 
-        btn = QPushButton("▶  Tao file mp3")
-        btn.clicked.connect(self._generate_tts)
+        btn = QPushButton("▶  Tao xong nghe thu truoc")
+        btn.clicked.connect(self._generate_preview)
         layout.addWidget(btn)
+        self.save_btn = QPushButton("⬇  Nghe ok roi, tai xuong file mp3")
+        self.save_btn.setEnabled(False)
+        self.save_btn.clicked.connect(self._save_preview)
+        layout.addWidget(self.save_btn)
+        layout.addWidget(QLabel("Luồng mới: tạo -> nghe thử -> ok mới tải. Không lưu ngay khi chưa nghe."))
         self.status = QLabel("San sang.")
         self.status.setObjectName("status")
         layout.addWidget(self.status)
+        self.preview_path = ""
         return tab
 
-    def _generate_tts(self):
+    def _generate_preview(self):
         text = self.text.toPlainText().strip()
         if not text:
             QMessageBox.warning(self, "VoiceVibe", "Chua co text de doc.")
             return
-        output, _ = QFileDialog.getSaveFileName(self, "Luu file mp3", "output.mp3", "MP3 (*.mp3)")
-        if not output:
-            return
-        self.status.setText("Dang tao giong doc...")
+        # Generate to a temp file first, so the user can listen before saving.
+        fd, self.preview_path = tempfile.mkstemp(suffix=".mp3", prefix="voicevibe_preview_")
+        os.close(fd)
+        self.save_btn.setEnabled(False)
+        self.status.setText("Dang tao ban nghe thu...")
         voice = self.voice.currentData()
         rate = self.rate.currentText()
-        Worker(synthesize(text, voice, rate, "+0Hz", "+0%", output), lambda ok, m: self.done.emit(ok, m)).start()
+        def on_preview_done(ok, msg):
+            if ok:
+                self.save_btn.setEnabled(True)
+                self.status.setText("Da tao xong. Dang mo ban nghe thu, nghe ok thi bam nut tai xuong.")
+                # Open with the system default player on Windows; no extra audio lib needed.
+                try:
+                    os.startfile(self.preview_path)  # type: ignore[attr-defined]
+                except Exception:
+                    QMessageBox.information(self, "Nghe thu", f"Ban nghe thu o: {self.preview_path}")
+            self.done.emit(ok, msg if not ok else "Da tao ban nghe thu.")
+        Worker(synthesize(text, voice, rate, "+0Hz", "+0%", self.preview_path), on_preview_done).start()
+
+    def _save_preview(self):
+        if not self.preview_path or not os.path.exists(self.preview_path):
+            QMessageBox.warning(self, "VoiceVibe", "Chua co ban nghe thu. Hay bam tao truoc.")
+            return
+        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file mp3", "output.mp3", "MP3 (*.mp3)")
+        if not output:
+            return
+        shutil.copyfile(self.preview_path, output)
+        self.status.setText(f"Da tai xuong: {output}")
 
     def _vc_tab(self):
         tab = QWidget()
