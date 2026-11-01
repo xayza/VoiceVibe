@@ -101,3 +101,18 @@ Khong can cai Python, khong can chay lenh:
 File exe duoc build tu dong bang GitHub Actions tren Windows (xem
 `.github/workflows/build-exe.yml`), moi lan day code len main la co ban exe moi.
 Neu muon tu build tren may Windows cua ban, chay file `build-exe.bat`.
+
+## Giao dien dep - PySide6 + QSS
+
+Giao dien chinh hien tai la `gui_qt.py`, khong phai ban Tkinter cu (`gui.py` giu lai lam du phong).
+- **Ngon ngu dep nhat cho desktop exe:** PySide6 (Qt) + QSS. QSS viet giong CSS
+  (mau, bo tron, hover, padding, font), nen de lam dep ma van la app desktop that,
+  an mo la mo, khong can mo trinh duyet.
+- **Vi sao khong dung web HTML/CSS:** web cung dep, nhung can chay server + mo
+  trinh duyet, khong gon bang 1 file exe. Qt cung la thu HaizFlow dang dung (Qt/QML).
+- Giao dien co 3 tab de dung: **Text to Speech** (dan text -> tao mp3),
+  **Doi giong** (chon file goc + file mau -> doi giong),
+  **Model** (xem model, xoa model de nhe may, cai OmniVoice / VieNeu).
+- Cai dat: `pip install -r requirements-qt.txt`, chay `python gui_qt.py`.
+  Build exe: chay `build-exe.bat` tren Windows, ra `dist\VoiceVibe.exe`.
+  Luu y: exe Qt se nang hon exe Tkinter (khoang vai chuc MB), doi lai giao dien dep va chuyen nghiep hon.
