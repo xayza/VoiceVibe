@@ -63,12 +63,14 @@ class Worker(threading.Thread):
 
 class MainWindow(QMainWindow):
     done = Signal(bool, str)
+    vc_done = Signal(bool, str)
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("VoiceVibe - Text to Speech & Voice Conversion")
         self.resize(760, 620)
         self.done.connect(self._on_done)
+        self.vc_done.connect(self._on_vc_done)
 
         root = QWidget()
         layout = QVBoxLayout(root)
@@ -191,16 +193,29 @@ class MainWindow(QMainWindow):
         self.mode.addItems(["light", "balanced", "quality"])
         row.addWidget(self.mode)
         layout.addLayout(row)
-        btn = QPushButton("🔄  Doi giong ngay")
+        btn = QPushButton("🔄  Doi giong xong nghe thu truoc")
         btn.clicked.connect(self._convert)
         layout.addWidget(btn)
-        layout.addWidget(QLabel("Light la mac dinh cho may yeu. Seed-VC la tot nhat neu khong train."))
+        self.vc_save_btn = QPushButton("⬇  Nghe ok roi, tai xuong file wav")
+        self.vc_save_btn.setEnabled(False)
+        self.vc_save_btn.clicked.connect(self._save_vc_preview)
+        layout.addWidget(self.vc_save_btn)
+        self.vc_status = QLabel("San sang.")
+        self.vc_status.setObjectName("status")
+        layout.addWidget(self.vc_status)
+        self.vc_preview_path = ""
+        layout.addWidget(QLabel("Luồng mới, giống TTS: doi -> nghe thu -> ok moi tai. Light la mac dinh cho may yeu. Seed-VC la tot nhat neu khong train."))
         return tab
 
     def _pick(self, widget):
         path, _ = QFileDialog.getOpenFileName(self, "Chon file wav", "", "WAV (*.wav)")
         if path:
             widget.setPlainText(path)
+
+    def _on_vc_done(self, ok, msg):
+        self.vc_status.setText(msg)
+        if not ok:
+            QMessageBox.warning(self, "VoiceVibe", msg)
 
     def _convert(self):
         from voice_convert import main as vc_main
@@ -209,13 +224,40 @@ class MainWindow(QMainWindow):
         if not src or not ref:
             QMessageBox.warning(self, "VoiceVibe", "Can ca file goc va file giong mau.")
             return
-        out, _ = QFileDialog.getSaveFileName(self, "Luu file wav", "converted.wav", "WAV (*.wav)")
-        if not out:
+        fd, self.vc_preview_path = tempfile.mkstemp(suffix=".wav", prefix="voicevibe_vc_preview_")
+        os.close(fd)
+        self.vc_save_btn.setEnabled(False)
+        self.vc_status.setText("Dang doi giong, tao ban nghe thu...")
+        model = self.model.currentText()
+        mode = self.mode.currentText()
+        temp = self.vc_preview_path
+        def run():
+            try:
+                code = vc_main(["--model", model, "--mode", mode, "--source", src, "--reference", ref, "--output", temp])
+                if code == 0 and os.path.exists(temp) and os.path.getsize(temp) > 0:
+                    self.vc_save_btn.setEnabled(True)
+                    try:
+                        os.startfile(temp)  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+                    self.vc_done.emit(True, "Da doi xong. Dang mo ban nghe thu, nghe ok thi bam nut tai xuong.")
+                elif code == 0:
+                    self.vc_done.emit(False, "Model chua cai hoac chua tao duoc file. Hay cai model theo huong dan trong tab Model roi thu lai.")
+                else:
+                    self.vc_done.emit(False, "Chuyen voice chua xong. Hay kiem tra model da cai chua.")
+            except Exception as exc:
+                self.vc_done.emit(False, str(exc))
+        threading.Thread(target=run, daemon=True).start()
+
+    def _save_vc_preview(self):
+        if not self.vc_preview_path or not os.path.exists(self.vc_preview_path):
+            QMessageBox.warning(self, "VoiceVibe", "Chua co ban nghe thu. Hay bam doi giong truoc.")
             return
-        # Run in a thread so the UI does not freeze; voice_convert prints its own steps.
-        threading.Thread(target=lambda: vc_main(["--model", self.model.currentText(), "--mode", self.mode.currentText(),
-                                                 "--source", src, "--reference", ref, "--output", out]), daemon=True).start()
-        QMessageBox.information(self, "VoiceVibe", f"Dang chay chuyen voice, ket qua se luu tai:\n{out}")
+        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file wav", "converted.wav", "WAV (*.wav)")
+        if not output:
+            return
+        shutil.copyfile(self.vc_preview_path, output)
+        self.vc_status.setText(f"Da tai xuong: {output}")
 
     def _models_tab(self):
         tab = QWidget()
