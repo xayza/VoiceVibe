@@ -27,6 +27,8 @@ def main(argv=None):
     parser.add_argument("--model", default="seed-vc", choices=list(MODELS))
     parser.add_argument("--mode", default="light", choices=["light", "balanced", "quality"],
                         help="light: may yeu, chay nhanh, it RAM/VRAM. Mac dinh la light.")
+    parser.add_argument("--singing", action="store_true", help="Che do hat: bat f0, diffusion-steps 30-50")
+    parser.add_argument("--style", action="store_true", help="Seed-VC v2: doi ca phong cach, khong chi giong")
     parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"],
                         help="auto: tu chon, cpu: ep chay CPU, cuda: ep chay GPU NVIDIA")
     parser.add_argument("--source", help="File am thanh goc (wav)")
@@ -60,6 +62,8 @@ def main(argv=None):
             return 2
         cfg = MODELS["seed-vc"]["config"]
         preset = PRESETS[args.mode]
+        if args.singing:
+            preset = dict(preset); preset["seed_vc_diffusion_steps"] = 40
         device = args.device if args.device != "auto" else preset["device"]
         print(f"Mode: {args.mode} (diffusion-steps {preset['seed_vc_diffusion_steps']}, device {device})")
         cmd = [sys.executable, str(script),

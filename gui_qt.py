@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QPushButton, QSlider, QTabWidget, QTextEdit, QVBoxLayout, QWidget, QHBoxLayout,
 )
 
-from models import INSTALL_STEPS, delete_model, list_models, save_haizflow_models_dir
+from models import INSTALL_STEPS, delete_model, download_model, list_models, save_haizflow_models_dir
+from settings import add_history, load_config, load_history, save_config
+from version import VERSION
 from tts import synthesize
 from voices import ALL_VOICES
 
@@ -43,8 +45,23 @@ QPushButton#ghost { background: #232842; }
 QLabel#title { font-size: 26px; font-weight: bold; color: white; }
 QLabel#subtitle { color: #9aa3c0; font-size: 13px; }
 QLabel#status { color: #00d2a8; }
+LIGHT_QSS = ""
+
 QSlider::groove:horizontal { height: 6px; background: #2a2f45; border-radius: 3px; }
 QSlider::handle:horizontal { width: 18px; background: #6c5ce7; border-radius: 9px; margin: -6px 0; }
+"""
+LIGHT_QSS = """
+QMainWindow { background: #f2f3f7; }
+QWidget { color: #1a1c2a; font-family: Segoe UI, Arial; font-size: 14px; }
+QTabWidget::pane { border: 1px solid #d0d3e0; border-radius: 14px; background: white; padding: 14px; }
+QTabBar::tab { background: #e8eaf2; padding: 10px 22px; border-radius: 10px; margin-right: 6px; }
+QTabBar::tab:selected { background: #6c5ce7; color: white; }
+QTextEdit, QComboBox { background: white; border: 1px solid #d0d3e0; border-radius: 10px; padding: 10px; }
+QPushButton { background: #6c5ce7; color: white; border: none; border-radius: 12px; padding: 12px 20px; font-weight: bold; }
+QPushButton#danger { background: #e74c3c; }
+QPushButton#ghost { background: #e8eaf2; color: #1a1c2a; }
+QLabel#title { font-size: 26px; font-weight: bold; }
+QLabel#status { color: #0a7a5f; }
 """
 
 
@@ -74,7 +91,7 @@ class MainWindow(QMainWindow):
 
         root = QWidget()
         layout = QVBoxLayout(root)
-        title = QLabel("🎙️ VoiceVibe")
+        title = QLabel(f"🎙️ VoiceVibe  v{VERSION}")
         title.setObjectName("title")
         subtitle = QLabel("Nhap text la co giong doc. Chon file la doi duoc giong. Khong can biet code.")
         subtitle.setObjectName("subtitle")
@@ -86,6 +103,9 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._tts_tab(), "🎤 Text to Speech")
         tabs.addTab(self._vc_tab(), "🔄 Doi giong")
         tabs.addTab(self._models_tab(), "📦 Model")
+        tabs.addTab(self._batch_tab(), "📚 Batch & Lich su")
+        tabs.addTab(self._train_tab(), "🎓 Train & Real-time")
+        tabs.addTab(self._settings_tab(), "⚙️ Cai dat")
         layout.addWidget(tabs)
         self.setCentralWidget(root)
 
@@ -114,12 +134,37 @@ class MainWindow(QMainWindow):
         self.rate.addItems(["-20%", "-10%", "+0%", "+10%", "+20%", "+30%"])
         self.rate.setCurrentText("+0%")
         row.addWidget(self.rate)
+        row.addWidget(QLabel("Cao do:"))
+        self.pitch = QComboBox()
+        self.pitch.addItems(["-10Hz", "+0Hz", "+10Hz"])
+        self.pitch.setCurrentText("+0Hz")
+        row.addWidget(self.pitch)
+        row.addWidget(QLabel("Am luong:"))
+        self.volume = QComboBox()
+        self.volume.addItems(["-20%", "+0%", "+20%"])
+        self.volume.setCurrentText("+0%")
+        row.addWidget(self.volume)
         layout.addLayout(row)
+        row2 = QHBoxLayout()
+        imp = QPushButton("📂 Mo file text (.txt)")
+        imp.setObjectName("ghost")
+        imp.clicked.connect(self._import_text)
+        row2.addWidget(imp)
+        row2.addWidget(QLabel("Dinh dang tai:"))
+        self.fmt = QComboBox()
+        self.fmt.addItems(["mp3", "wav", "ogg"])
+        row2.addWidget(self.fmt)
+        layout.addLayout(row2)
 
         btn = QPushButton("▶  Tao xong nghe thu truoc")
         btn.clicked.connect(self._generate_preview)
         layout.addWidget(btn)
-        self.save_btn = QPushButton("⬇  Nghe ok roi, tai xuong file mp3")
+        self.play_btn = QPushButton("▶  Nghe thu trong app")
+        self.play_btn.setObjectName("ghost")
+        self.play_btn.setEnabled(False)
+        self.play_btn.clicked.connect(self._play_preview)
+        layout.addWidget(self.play_btn)
+        self.save_btn = QPushButton("⬇  Nghe ok roi, tai xuong file")
         self.save_btn.setEnabled(False)
         self.save_btn.clicked.connect(self._save_preview)
         layout.addWidget(self.save_btn)
@@ -142,9 +187,12 @@ class MainWindow(QMainWindow):
         self.status.setText("Dang tao ban nghe thu...")
         voice = self.voice.currentData()
         rate = self.rate.currentText()
+        pitch = self.pitch.currentText()
+        volume = self.volume.currentText()
         def on_preview_done(ok, msg):
             if ok:
                 self.save_btn.setEnabled(True)
+                self.play_btn.setEnabled(True)
                 self.status.setText("Da tao xong. Dang mo ban nghe thu, nghe ok thi bam nut tai xuong.")
                 # Open with the system default player on Windows; no extra audio lib needed.
                 try:
@@ -152,16 +200,50 @@ class MainWindow(QMainWindow):
                 except Exception:
                     QMessageBox.information(self, "Nghe thu", f"Ban nghe thu o: {self.preview_path}")
             self.done.emit(ok, msg if not ok else "Da tao ban nghe thu.")
-        Worker(synthesize(text, voice, rate, "+0Hz", "+0%", self.preview_path), on_preview_done).start()
+        Worker(synthesize(text, voice, rate, pitch, volume, self.preview_path), on_preview_done).start()
+
+    def _import_text(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Mo file text", "", "Text (*.txt)")
+        if path:
+            self.text.setPlainText(open(path, encoding="utf-8", errors="ignore").read())
+
+    def _play_preview(self):
+        if not self.preview_path or not os.path.exists(self.preview_path):
+            return
+        try:
+            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+            from PySide6.QtCore import QUrl
+            self._player = QMediaPlayer()
+            self._audio = QAudioOutput()
+            self._player.setAudioOutput(self._audio)
+            self._player.setSource(QUrl.fromLocalFile(self.preview_path))
+            self._player.play()
+            self.status.setText("Dang phat ban nghe thu trong app...")
+        except Exception:
+            try:
+                os.startfile(self.preview_path)  # type: ignore[attr-defined]
+            except Exception:
+                QMessageBox.information(self, "Nghe thu", f"Ban nghe thu o: {self.preview_path}")
 
     def _save_preview(self):
         if not self.preview_path or not os.path.exists(self.preview_path):
             QMessageBox.warning(self, "VoiceVibe", "Chua co ban nghe thu. Hay bam tao truoc.")
             return
-        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file mp3", "output.mp3", "MP3 (*.mp3)")
+        fmt = self.fmt.currentText()
+        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file", f"output.{fmt}", f"{fmt.upper()} (*.{fmt})")
         if not output:
             return
-        shutil.copyfile(self.preview_path, output)
+        if output.lower().endswith(".mp3") or fmt == "mp3":
+            shutil.copyfile(self.preview_path, output)
+        else:
+            import subprocess
+            try:
+                subprocess.run(["ffmpeg", "-y", "-i", self.preview_path, output], check=True)
+            except Exception:
+                shutil.copyfile(self.preview_path, output)
+                output += " (luu dang mp3 vi thieu ffmpeg)"
+        add_history({"type": "tts", "voice": self.voice.currentData(), "text": self.text.toPlainText()[:120], "output": output})
+        save_config({"favorite_voice": self.voice.currentData(), "output_format": fmt})
         self.status.setText(f"Da tai xuong: {output}")
 
     def _vc_tab(self):
@@ -193,6 +275,11 @@ class MainWindow(QMainWindow):
         self.mode.addItems(["light", "balanced", "quality"])
         row.addWidget(self.mode)
         layout.addLayout(row)
+        from PySide6.QtWidgets import QCheckBox
+        self.singing = QCheckBox("Che do hat (F0, diffusion 40)")
+        self.style = QCheckBox("Doi ca phong cach (Seed-VC v2)")
+        layout.addWidget(self.singing)
+        layout.addWidget(self.style)
         btn = QPushButton("🔄  Doi giong xong nghe thu truoc")
         btn.clicked.connect(self._convert)
         layout.addWidget(btn)
@@ -233,7 +320,12 @@ class MainWindow(QMainWindow):
         temp = self.vc_preview_path
         def run():
             try:
-                code = vc_main(["--model", model, "--mode", mode, "--source", src, "--reference", ref, "--output", temp])
+                args = ["--model", model, "--mode", mode, "--source", src, "--reference", ref, "--output", temp]
+                if self.singing.isChecked():
+                    args.append("--singing")
+                if self.style.isChecked():
+                    args.append("--style")
+                code = vc_main(args)
                 if code == 0 and os.path.exists(temp) and os.path.getsize(temp) > 0:
                     self.vc_save_btn.setEnabled(True)
                     try:
@@ -259,6 +351,75 @@ class MainWindow(QMainWindow):
         shutil.copyfile(self.vc_preview_path, output)
         self.vc_status.setText(f"Da tai xuong: {output}")
 
+
+    def _batch_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.addWidget(QLabel("Batch: chon thu muc chua cac file .txt, moi file se tao 1 file mp3 cung ten."))
+        btn = QPushButton("📂 Chon thu muc .txt va tao hang loat")
+        btn.clicked.connect(self._run_batch)
+        layout.addWidget(btn)
+        layout.addWidget(QLabel("Lich su 50 lan tao gan nhat:"))
+        self.history_text = QTextEdit()
+        self.history_text.setReadOnly(True)
+        layout.addWidget(self.history_text)
+        self._refresh_history()
+        return tab
+
+    def _refresh_history(self):
+        lines = []
+        for h in load_history():
+            lines.append(f"{h.get('type','')}: {h.get('voice','')} - {h.get('text','')[:80]} -> {h.get('output','')}")
+        self.history_text.setPlainText("\n".join(lines) if lines else "Chua co lich su.")
+
+    def _run_batch(self):
+        folder = QFileDialog.getExistingDirectory(self, "Chon thu muc .txt")
+        if not folder:
+            return
+        import glob
+        files = sorted(glob.glob(os.path.join(folder, "*.txt")))
+        if not files:
+            QMessageBox.warning(self, "Batch", "Thu muc khong co file .txt.")
+            return
+        def run():
+            for path in files:
+                text = open(path, encoding="utf-8", errors="ignore").read()
+                out = os.path.splitext(path)[0] + ".mp3"
+                asyncio.run(synthesize(text, self.voice.currentData(), self.rate.currentText(), "+0Hz", "+0%", out))
+            self.done.emit(True, f"Batch xong: {len(files)} file.")
+        threading.Thread(target=run, daemon=True).start()
+
+    def _train_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.addWidget(QLabel("Train giong RVC rieng (can Applio hoac RVC WebUI da cai):"))
+        layout.addWidget(QLabel("1. Chuan bi 10-30 phut vocal sach, khong nhac, khong on, dinh dang wav."))
+        layout.addWidget(QLabel("2. Mo Applio, tao experiment moi, chon 40k, f0 bat, RMVPE, train 200-500 epoch."))
+        layout.addWidget(QLabel("3. Lay file .pth train xong, dat vao models/rvc-v2/ de dung trong tab Doi giong."))
+        layout.addWidget(QLabel("Real-time: neu da cai Seed-VC, chay real-time-gui.py cua Seed-VC de doi giong truc tiep. VoiceVibe chua tu viet lai engine real-time, vi do la ca 1 app rieng."))
+        btn = QPushButton("Mo huong dan train RVC (applio.org)")
+        btn.setObjectName("ghost")
+        btn.clicked.connect(lambda: QMessageBox.information(self, "Train RVC", "Mo trinh duyet va vao applio.org, chon Train, lam theo 3 buoc tren."))
+        layout.addWidget(btn)
+        return tab
+
+    def _settings_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.addWidget(QLabel(f"VoiceVibe v{VERSION} - Cai dat chung"))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Giao dien:"))
+        theme = QComboBox()
+        theme.addItems(["Toi (mac dinh)", "Sang"])
+        theme.currentTextChanged.connect(lambda txt: QApplication.instance().setStyleSheet(LIGHT_QSS if txt.startswith("Sang") else QSS))
+        row.addWidget(theme, 1)
+        layout.addLayout(row)
+        cfg = load_config()
+        layout.addWidget(QLabel(f"Giong yeu thich da luu: {cfg.get('favorite_voice','chua co')}"))
+        layout.addWidget(QLabel(f"Thu muc Models HaizFlow da luu: {cfg.get('haizflow_models_dir','chua co')}"))
+        layout.addWidget(QLabel("Phien ban va cap nhat: hien tai la ban chay tu code, chua co cap nhat tu dong. Khi co ban moi, tai lai zip tu GitHub la xong."))
+        return tab
+
     def _models_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -276,6 +437,13 @@ class MainWindow(QMainWindow):
         del_btn.clicked.connect(self._delete_model)
         row.addWidget(del_btn)
         layout.addLayout(row)
+        row3 = QHBoxLayout()
+        for mname, mlabel in [("seed-vc", "Tai Seed-VC"), ("rvc-v2", "Tai RVC (huong dan)"), ("openvoice-v2", "Tai OpenVoice")]:
+            b = QPushButton(mlabel)
+            b.setObjectName("ghost")
+            b.clicked.connect(lambda _=False, n=mname: self._download_model(n))
+            row3.addWidget(b)
+        layout.addLayout(row3)
         layout.addWidget(QLabel("Cai giong local - chon 1 trong 2:"))
         row2 = QHBoxLayout()
         for name, label in [("omnivoice", "Cai OmniVoice"), ("vieneu", "Cai VieNeu")]:
@@ -285,6 +453,14 @@ class MainWindow(QMainWindow):
             row2.addWidget(btn)
         layout.addLayout(row2)
         return tab
+
+    def _download_model(self, name):
+        self.model_text.setPlainText(f"Dang tai {name}, cho mot luc...")
+        def run():
+            ok, msg = download_model(name)
+            self.vc_done.emit(ok, msg) if hasattr(self, "vc_done") else None
+            self._refresh_models()
+        threading.Thread(target=run, daemon=True).start()
 
     def _refresh_models(self):
         lines = []

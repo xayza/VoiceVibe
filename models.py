@@ -163,3 +163,24 @@ def load_haizflow_models_dir():
         return _json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("haizflow_models_dir", "")
     except Exception:
         return ""
+
+
+def download_model(name):
+    """Clone a model repo into models/<name>. Returns (ok, message)."""
+    import subprocess
+    if name not in MODELS:
+        return False, f"Model khong biet: {name}"
+    path = model_path(name)
+    if path.exists():
+        return True, f"{name} da co san."
+    url = {
+        "seed-vc": "https://github.com/Plachtaa/seed-vc.git",
+        "openvoice-v2": "https://github.com/myshell-ai/OpenVoice.git",
+    }.get(name)
+    if not url:
+        return False, f"{name} khong tai truc tiep duoc. {MODELS[name]['install']}"
+    try:
+        subprocess.run(["git", "clone", "--depth", "1", url, str(path)], check=True)
+        return True, f"Da tai {name} ve {path}."
+    except Exception as exc:
+        return False, f"Tai {name} that bai: {exc}. Hay cai git roi thu lai."
