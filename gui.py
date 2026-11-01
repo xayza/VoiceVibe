@@ -62,6 +62,22 @@ class App(tk.Tk):
             except Exception as exc:
                 messagebox.showerror("Xoa model", str(exc))
         ttk.Button(top, text="Xoa model da nhap", command=do_delete).pack(pady=10)
+        ttk.Label(top, text="Cai giong local (chon 1 trong 2):").pack(pady=(10, 0))
+        def show_install(name):
+            from models import INSTALL_STEPS, save_haizflow_models_dir
+            from tkinter import filedialog as _fd
+            info = tk.Toplevel(top)
+            info.title(f"Cai {name}")
+            tk.Label(info, text="\n".join(INSTALL_STEPS[name]), justify="left").pack(padx=15, pady=10)
+            def pick():
+                folder = _fd.askdirectory(title="Chon thu muc Models cua HaizFlow")
+                if folder:
+                    save_haizflow_models_dir(folder)
+                    messagebox.showinfo("Da luu", f"Da luu duong dan HaizFlow: {folder}")
+                    info.destroy()
+            ttk.Button(info, text="Chon thu muc Models cua HaizFlow", command=pick).pack(pady=10)
+        ttk.Button(top, text="Cai OmniVoice", command=lambda: show_install("omnivoice")).pack(pady=2)
+        ttk.Button(top, text="Cai VieNeu", command=lambda: show_install("vieneu")).pack(pady=2)
 
     def generate(self):
         text = self.text.get("1.0", "end").strip()

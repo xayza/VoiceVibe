@@ -90,3 +90,14 @@ Nguyen tac: mac dinh la nhe, chi nang khi may du suc.
   hoac `python voice_convert.py --delete-model seed-vc`, roi tai lai khi can.
 - **RAM toi thieu**: 8 GB RAM cho TTS Edge va OpenVoice, 16 GB khuyen nghi
   cho Seed-VC/RVC tren GPU.
+
+## File exe - an mo la mo
+
+Khong can cai Python, khong can chay lenh:
+1. Vao repo VoiceVibe tren GitHub -> tab **Actions** -> lan chay moi nhat
+   **Build Windows exe** -> tai artifact **VoiceVibe-Windows**, giai nen.
+2. An dup file **VoiceVibe.exe** la mo giao dien, dan text, chon giong, bam tao mp3.
+
+File exe duoc build tu dong bang GitHub Actions tren Windows (xem
+`.github/workflows/build-exe.yml`), moi lan day code len main la co ban exe moi.
+Neu muon tu build tren may Windows cua ban, chay file `build-exe.bat`.

@@ -128,3 +128,38 @@ def status_text():
 
 if __name__ == "__main__":
     print(status_text())
+
+
+# --- Install choice: OmniVoice or VieNeu ---
+# HaizFlow does not offer these two as a simple pip package. They come inside
+# HaizFlow resource packs. So VoiceVibe offers a real choice, not a fake download:
+#  1. Install the pack inside HaizFlow (Settings -> Resource Packs -> CPU/GPU pack)
+#  2. Point VoiceVibe at HaizFlow's models folder, and VoiceVibe saves that path.
+import json as _json
+
+CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
+
+INSTALL_STEPS = {
+    "omnivoice": [
+        "1. Mo HaizFlow -> Settings -> Resource Packs -> cai goi CPU hoac GPU.",
+        "2. Trong VoiceVibe, bam 'Chon thu muc Models cua HaizFlow' va chon thu muc models do.",
+        "3. VoiceVibe luu duong dan vao config.json, cac preset omnivoice:* se hien la da cai.",
+        "Luu y: OmniVoice chi dung phi thuong mai, theo giay phep trong HaizFlow.",
+    ],
+    "vieneu": [
+        "1. Mo HaizFlow -> Settings -> Resource Packs -> cai goi CPU hoac GPU (co VieNeu 3.8.3).",
+        "2. Trong VoiceVibe, bam 'Chon thu muc Models cua HaizFlow' va chon thu muc models do.",
+        "3. VoiceVibe luu duong dan vao config.json, cac preset vieneu:* se hien la da cai.",
+        "Luu y: VieNeu chi chay tot tren Windows, can file .pyd trong goi HaizFlow.",
+    ],
+}
+
+def save_haizflow_models_dir(path):
+    CONFIG_PATH.write_text(_json.dumps({"haizflow_models_dir": str(path)}, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
+
+def load_haizflow_models_dir():
+    try:
+        return _json.loads(CONFIG_PATH.read_text(encoding="utf-8")).get("haizflow_models_dir", "")
+    except Exception:
+        return ""
