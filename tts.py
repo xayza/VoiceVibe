@@ -20,7 +20,8 @@ DEFAULT_VOICE = "vi-VN-HoaiMyNeural"
 VOICES = {voice: voice for group in ALL_VOICES.values() for voice in group}
 
 
-def split_text(text, max_chars=900):
+def split_text(text, max_chars=600):
+    # Light default: smaller chunks use less RAM and recover better on failure.
     """Split long text into sentence chunks so no request is too long."""
     text = re.sub(r"\s+", " ", text).strip()
     if not text:
@@ -45,14 +46,16 @@ async def _speak(text, voice, rate, pitch, volume, output):
     await communicate.save(output)
 
 
-async def synthesize(text, voice, rate, pitch, volume, output):
+CHUNK_CHARS = 600
+
+async def synthesize(text, voice, rate, pitch, volume, output, chunk_chars=None):
     if voice.startswith("vieneu:") or voice.startswith("omnivoice:"):
         raise RuntimeError(
             f"Giong {voice} can goi tai nguyen HaizFlow (VieNeu/OmniVoice model + SDK), "
             "khong chay duoc chi bang pip. Hay chon giong Edge de chay ngay, "
             "hoac chi duong dan goi tai nguyen HaizFlow tren may Windows cua ban."
         )
-    chunks = split_text(text)
+    chunks = split_text(text, max_chars=chunk_chars or CHUNK_CHARS)
     if not chunks:
         raise ValueError("Text rong, khong co gi de doc.")
     if len(chunks) == 1:
@@ -87,6 +90,8 @@ def main(argv=None):
     parser.add_argument("--pitch", default="+0Hz", help="Cao do, vi du: -10Hz, +0Hz, +10Hz")
     parser.add_argument("--volume", default="+0%", help="Am luong, vi du: -20%%, +0%%, +20%%")
     parser.add_argument("--output", default="output.mp3", help="File mp3 dau ra")
+    parser.add_argument("--mode", default="light", choices=["light", "balanced", "quality"],
+                        help="light: chunk nho, it RAM. balanced: chunk 900. quality: chunk 1200.")
     parser.add_argument("--list-voices", action="store_true", help="Liet ke giong goi y")
     args = parser.parse_args(argv)
 
@@ -104,6 +109,8 @@ def main(argv=None):
     else:
         text = sys.stdin.read()
 
+    # Edge TTS is imported lazily inside synthesize, so --help and the GUI
+    # start fast on a weak machine with no heavy model loaded.
     asyncio.run(synthesize(text, args.voice, args.rate, args.pitch, args.volume, args.output))
     print(f"Done: {args.output}")
     return 0

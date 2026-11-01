@@ -1,0 +1,5 @@
+# Optional only. Do NOT install this on a light machine.
+# Light install is just: pip install -r requirements.txt  (edge-tts only)
+torch>=2.4
+torchaudio
+onnxruntime

@@ -67,3 +67,26 @@ la xoa sach thu muc do va giai phong dung luong, sau do tai lai khi can:
 python voice_convert.py --delete-model seed-vc
 python voice_convert.py --list-models
 ```
+
+## Toi uu cho may nhe - chay tot
+
+Nguyen tac: mac dinh la nhe, chi nang khi may du suc.
+- **Dung Edge TTS truoc**: 0 MB model, khong can GPU, khong can tai model.
+  Day la lua chon nhe nhat cho TTS.
+- **Khong load model luc mo app**: GUI va CLI chi import Edge TTS khi bam tao,
+  khong load Torch/ONNX luc khoi dong.
+- **Mode light (mac dinh)**: chunk text nho 600 ky tu, Seed-VC diffusion-steps 12
+  thay vi 30, RVC ban 32k thay vi 48k, ep CPU neu khong co GPU.
+  ```bash
+  python voice_convert.py --model seed-vc --mode light --device cpu --source in.wav --reference ref.wav --output out.wav
+  ```
+- **Seed-VC tren may khong co NVIDIA**: dung ban ONNX + DirectML, chay duoc
+  tren GPU DirectX 12 thong thuong, khong bat buoc NVIDIA.
+- **Cai dat nhe**: chi `pip install -r requirements.txt` (edge-tts).
+  File `requirements-gpu.txt` (torch, onnxruntime) chi cai khi may co GPU va can
+  chuyen voice nang.
+- **Xoa model de nhe may**: model nam trong `models/`, khong nam trong git.
+  Trong GUI bam "Quan ly model" -> nhap ten -> "Xoa model da nhap",
+  hoac `python voice_convert.py --delete-model seed-vc`, roi tai lai khi can.
+- **RAM toi thieu**: 8 GB RAM cho TTS Edge va OpenVoice, 16 GB khuyen nghi
+  cho Seed-VC/RVC tren GPU.

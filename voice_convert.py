@@ -19,12 +19,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-from models import MODELS, delete_model, list_models, model_path
+from models import MODELS, PRESETS, delete_model, list_models, model_path
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Voice conversion")
     parser.add_argument("--model", default="seed-vc", choices=list(MODELS))
+    parser.add_argument("--mode", default="light", choices=["light", "balanced", "quality"],
+                        help="light: may yeu, chay nhanh, it RAM/VRAM. Mac dinh la light.")
+    parser.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"],
+                        help="auto: tu chon, cpu: ep chay CPU, cuda: ep chay GPU NVIDIA")
     parser.add_argument("--source", help="File am thanh goc (wav)")
     parser.add_argument("--reference", help="File giong mau (wav, 1-30 giay cho Seed-VC)")
     parser.add_argument("--output", default="converted.wav")
@@ -55,10 +59,15 @@ def main(argv=None):
             print("Khong tim thay inference_v2.py trong models/seed-vc. Hay cai lai Seed-VC.")
             return 2
         cfg = MODELS["seed-vc"]["config"]
+        preset = PRESETS[args.mode]
+        device = args.device if args.device != "auto" else preset["device"]
+        print(f"Mode: {args.mode} (diffusion-steps {preset['seed_vc_diffusion_steps']}, device {device})")
         cmd = [sys.executable, str(script),
                "--source", args.source, "--target", args.reference, "--output", args.output,
-               "--diffusion-steps", str(cfg["diffusion_steps"]),
+               "--diffusion-steps", str(preset["seed_vc_diffusion_steps"]),
                "--inference-cfg-rate", str(cfg["inference_cfg_rate"])]
+        if device == "cpu":
+            cmd += ["--device", "cpu"]
         print("Chay:", " ".join(cmd))
         subprocess.run(cmd, check=True)
         print(f"Done: {args.output}")

@@ -24,6 +24,20 @@ from pathlib import Path
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 
+# Light-machine presets: speed first, quality second. Light mode is the
+# default recommendation on a weak machine, even if quality drops a bit.
+PRESETS = {
+    "light": {"seed_vc_diffusion_steps": 12, "rvc_sample_rate": "32k", "chunk_chars": 600, "device": "cpu"},
+    "balanced": {"seed_vc_diffusion_steps": 20, "rvc_sample_rate": "40k", "chunk_chars": 900, "device": "auto"},
+    "quality": {"seed_vc_diffusion_steps": 30, "rvc_sample_rate": "48k", "chunk_chars": 1200, "device": "cuda"},
+}
+LIGHT_NOTES = (
+    "May nhe: dung Edge TTS truoc (0 MB model, khong can GPU). "
+    "Seed-VC dung ban ONNX + DirectML neu khong co NVIDIA, hoac ban small 22050. "
+    "RVC dung ban 32k thay vi 48k. Luon xoa model khong dung de nhe may."
+)
+
+
 MODELS = {
     "seed-vc": {
         "label": "Seed-VC (zero-shot, tot nhat hien nay)",
