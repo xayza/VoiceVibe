@@ -211,11 +211,14 @@ class MainWindow(QMainWindow):
         if not self.preview_path or not os.path.exists(self.preview_path):
             return
         try:
+            # Reuse one player instead of creating a new one each time (lighter).
             from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
             from PySide6.QtCore import QUrl
-            self._player = QMediaPlayer()
-            self._audio = QAudioOutput()
-            self._player.setAudioOutput(self._audio)
+            if not hasattr(self, "_player") or self._player is None:
+                self._player = QMediaPlayer()
+                self._audio = QAudioOutput()
+                self._player.setAudioOutput(self._audio)
+            self._player.stop()
             self._player.setSource(QUrl.fromLocalFile(self.preview_path))
             self._player.play()
             self.status.setText("Dang phat ban nghe thu trong app...")
@@ -225,12 +228,20 @@ class MainWindow(QMainWindow):
             except Exception:
                 QMessageBox.information(self, "Nghe thu", f"Ban nghe thu o: {self.preview_path}")
 
+    def _default_export_dir(self):
+        cfg = load_config()
+        folder = cfg.get("export_folder", "")
+        return folder if folder and os.path.isdir(folder) else ""
+
     def _save_preview(self):
         if not self.preview_path or not os.path.exists(self.preview_path):
             QMessageBox.warning(self, "VoiceVibe", "Chua co ban nghe thu. Hay bam tao truoc.")
             return
         fmt = self.fmt.currentText()
-        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file", f"output.{fmt}", f"{fmt.upper()} (*.{fmt})")
+        start = os.path.join(self._default_export_dir(), f"output.{fmt}") if self._default_export_dir() else f"output.{fmt}"
+        output, _ = QFileDialog.getSaveFileName(self, "Chon cho de xuat file", start, f"{fmt.upper()} (*.{fmt})")
+        if output:
+            save_config({"export_folder": os.path.dirname(output)})
         if not output:
             return
         if output.lower().endswith(".mp3") or fmt == "mp3":
@@ -345,7 +356,10 @@ class MainWindow(QMainWindow):
         if not self.vc_preview_path or not os.path.exists(self.vc_preview_path):
             QMessageBox.warning(self, "VoiceVibe", "Chua co ban nghe thu. Hay bam doi giong truoc.")
             return
-        output, _ = QFileDialog.getSaveFileName(self, "Tai xuong file wav", "converted.wav", "WAV (*.wav)")
+        start = os.path.join(self._default_export_dir(), "converted.wav") if self._default_export_dir() else "converted.wav"
+        output, _ = QFileDialog.getSaveFileName(self, "Chon cho de xuat file", start, "WAV (*.wav)")
+        if output:
+            save_config({"export_folder": os.path.dirname(output)})
         if not output:
             return
         shutil.copyfile(self.vc_preview_path, output)
@@ -376,6 +390,9 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, "Chon thu muc .txt")
         if not folder:
             return
+        out_folder = QFileDialog.getExistingDirectory(self, "Chon cho de xuat file mp3 batch")
+        if not out_folder:
+            out_folder = folder
         import glob
         files = sorted(glob.glob(os.path.join(folder, "*.txt")))
         if not files:
@@ -384,7 +401,7 @@ class MainWindow(QMainWindow):
         def run():
             for path in files:
                 text = open(path, encoding="utf-8", errors="ignore").read()
-                out = os.path.splitext(path)[0] + ".mp3"
+                out = os.path.join(out_folder, os.path.splitext(os.path.basename(path))[0] + ".mp3")
                 asyncio.run(synthesize(text, self.voice.currentData(), self.rate.currentText(), "+0Hz", "+0%", out))
             self.done.emit(True, f"Batch xong: {len(files)} file.")
         threading.Thread(target=run, daemon=True).start()
@@ -418,6 +435,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(QLabel(f"Giong yeu thich da luu: {cfg.get('favorite_voice','chua co')}"))
         layout.addWidget(QLabel(f"Thu muc Models HaizFlow da luu: {cfg.get('haizflow_models_dir','chua co')}"))
         layout.addWidget(QLabel("Phien ban va cap nhat: hien tai la ban chay tu code, chua co cap nhat tu dong. Khi co ban moi, tai lai zip tu GitHub la xong."))
+        exp_btn = QPushButton("📂 Chon thu muc xuat file mac dinh")
+        exp_btn.setObjectName("ghost")
+        def pick_export():
+            f = QFileDialog.getExistingDirectory(self, "Chon thu muc xuat file mac dinh")
+            if f:
+                save_config({"export_folder": f})
+                QMessageBox.information(self, "Xuat file", f"Da luu thu muc xuat mac dinh: {f}")
+        exp_btn.clicked.connect(pick_export)
+        layout.addWidget(exp_btn)
         return tab
 
     def _models_tab(self):
